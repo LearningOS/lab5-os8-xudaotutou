@@ -75,7 +75,7 @@ impl ProcessControlBlockInner {
     pub fn mutex_deadlock_detect(&self) -> bool {
         let mut work = self.mutex_available_vector.clone();
         let need = &self.mutex_need_vector;
-        let src_len = need.len();
+        let src_len = self.thread_count();
         let mut finish = vec![false; src_len];
         let allocation = &self.mutex_allocation_vector;
 
@@ -102,7 +102,7 @@ impl ProcessControlBlockInner {
     pub fn semaphore_deadlock_detect(&self) -> bool {
         let mut s_work = self.semaphore_available_vector.clone();
         let s_need = &self.semaphore_need_vector;
-        let s_src_len = s_need.len();
+        let s_src_len = self.thread_count();
         let mut s_finish = vec![false; s_src_len];
         let s_allocation = &self.semaphore_allocation_vector;
         (0..s_src_len).all(|task_id| {
@@ -125,6 +125,66 @@ impl ProcessControlBlockInner {
                 s_finish.iter().take(task_id).all(|t| *t)
             }
         })
+    }
+    pub fn deadlock_detect(&self) -> bool{
+        let n =  self.thread_count();
+        let m1 = self.mutex_available_vector.len();
+        let m2 = self.semaphore_available_vector.len();
+        // println!("mutex");
+        // println!("avaliable:{:?}, allocation:{:?}, need:{:?}",self.mutex_available_vector,self.mutex_allocation_vector, self.mutex_need_vector);
+        // println!("semaphore");
+        // println!(
+        //     "avaliable:{:?}, allocation:{:?}, need:{:?}",
+        //     self.semaphore_available_vector, self.semaphore_allocation_vector, self.semaphore_need_vector
+        // );
+        //步骤1
+        let mut mutex_work = self.mutex_available_vector.clone();
+        let mut semaphore_work = self.semaphore_available_vector.clone();
+        let mut finish: Vec<bool> = vec![false; n];
+        let mut find_available: bool = false;
+        let mut find_unfinish: bool = false;
+        loop {
+            find_unfinish = false;
+            for i in 0..n {
+                if finish[i] == false {
+                    find_unfinish = true;
+                    find_available = true;
+                    //步骤2
+                    for j in 0..m1 {
+                        if self.mutex_need_vector[i][j] > mutex_work[j] {
+                            find_available = false;
+                            break;
+                        }
+                    }
+                    for j in 0..m2 {
+                        if self.semaphore_need_vector[i][j] > semaphore_work[j] {
+                            find_available = false;
+                            break;
+                        }
+                    }
+                    //步骤3
+                    if find_available {
+                        for j in 0..m1 {
+                            mutex_work[j] = mutex_work[j] + self.mutex_allocation_vector[i][j];
+                        }
+                        for j in 0..m2 {
+                            semaphore_work[j] = semaphore_work[j] + self.semaphore_allocation_vector[i][j];
+                        }
+                        finish[i] = true;
+                        break;
+                    }
+                }
+            }
+            //步骤4
+            if find_unfinish == false {
+                println!("detect no dead");
+                return false;
+            }
+            if find_available == false {
+                println!("detect dead");
+                return true;
+            }
+        }
     }
 }
 

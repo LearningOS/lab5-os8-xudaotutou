@@ -59,38 +59,39 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
 
 // LAB5 HINT: Return -0xDEAD if deadlock is detected
 pub fn sys_mutex_lock(mutex_id: usize) -> isize {
-    let process = current_process();
-    let mut process_inner = process.inner_exclusive_access();
+    let mutex = {
+        let process = current_process();
+        let mut process_inner = process.inner_exclusive_access();
 
-    if let Some(task) = current_task() {
-        let task_inner = task.inner_exclusive_access();
-        if let Some(res) = task_inner.res.as_ref() {
-            let tid = res.tid;
-            process_inner.mutex_need_vector[tid][mutex_id] += 1;
+        if let Some(task) = current_task() {
+            let task_inner = task.inner_exclusive_access();
+            if let Some(res) = task_inner.res.as_ref() {
+                let tid = res.tid;
+                process_inner.mutex_need_vector[tid][mutex_id] += 1;
+                process_inner.mutex_id = mutex_id;
+            } else {
+                // 没有res,need
+                return -1;
+            }
         } else {
-            // 没有res,need
+            // 没有task
             return -1;
         }
-    } else {
-        // 没有task
-        return -1;
-    }
-    if process_inner.enable_deadlock && !process_inner.mutex_deadlock_detect() {
-        return -0xDEAD;
-    }
-    let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
-    drop(process_inner);
-    drop(process);
+        if process_inner.enable_deadlock && process_inner.deadlock_detect() {
+            return -0xDEAD;
+        }
+        Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap())
+    };
     mutex.lock();
     return 0;
 }
 
 pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
-    let process = current_process();
-    let process_inner = process.inner_exclusive_access();
-    let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
-    drop(process_inner);
-    drop(process);
+    let mutex = {
+        let process = current_process();
+        let process_inner = process.inner_exclusive_access();
+        Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap())
+    };
     mutex.unlock();
     0
 }
@@ -106,7 +107,7 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
         .map(|(id, _)| id)
     {
         process_inner.semaphore_list[id] = Some(Arc::new(Semaphore::new(res_count)));
-        process_inner.mutex_available_vector[id] = res_count;
+        process_inner.semaphore_available_vector[id] = res_count;
         process_inner
             .semaphore_list
             .push(Some(Arc::new(Semaphore::new(res_count))));
@@ -122,6 +123,7 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
         process_inner.semaphore_id = id;
         id
     } else {
+        println!("push!");
         process_inner
             .semaphore_list
             .push(Some(Arc::new(Semaphore::new(res_count))));
@@ -139,49 +141,52 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
     };
     // 每个thread增加一个资源类别
     println!(
-        "list_len:{}, id:{}, allocation_vector_len:{}",
-        process_inner.semaphore_list.len(),
-        id,
-        process_inner.semaphore_allocation_vector.len()
+        "avaliable:{:?}, allocation:{:?}, need:{:?}",
+        process_inner.semaphore_available_vector,
+        process_inner.semaphore_allocation_vector,
+        process_inner.semaphore_need_vector
     );
-    println!(
-        "available:{}",
-        process_inner.semaphore_available_vector.len()
-    );
+
     id as isize
 }
 
 pub fn sys_semaphore_up(sem_id: usize) -> isize {
-    let process = current_process();
-    let process_inner = process.inner_exclusive_access();
-    let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
-    drop(process_inner);
+    let sem = {
+        let process = current_process();
+        let process_inner = process.inner_exclusive_access();
+
+        Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap())
+    };
     sem.up();
     0
 }
 
 // LAB5 HINT: Return -0xDEAD if deadlock is detected
 pub fn sys_semaphore_down(sem_id: usize) -> isize {
-    let process = current_process();
-    let mut process_inner = process.inner_exclusive_access();
-    if let Some(task) = current_task() {
-        let task_inner = task.inner_exclusive_access();
-        if let Some(res) = task_inner.res.as_ref() {
-            let tid = res.tid;
-            process_inner.semaphore_need_vector[tid][sem_id] += 1;
+    let sem = {
+        let process = current_process();
+        let mut process_inner = process.inner_exclusive_access();
+        if let Some(task) = current_task() {
+            let task_inner = task.inner_exclusive_access();
+            if let Some(res) = task_inner.res.as_ref() {
+                let tid = res.tid;
+                // println!("before need_vector:{:?}",process_inner.semaphore_need_vector);
+                process_inner.semaphore_need_vector[tid][sem_id] += 1;
+                process_inner.semaphore_id = sem_id;
+                // println!("after need_vector:{:?}",process_inner.semaphore_need_vector);
+            } else {
+                // 没有res,need
+                return -1;
+            }
         } else {
-            // 没有res,need
+            // 没有task
             return -1;
         }
-    } else {
-        // 没有task
-        return -1;
-    }
-    if process_inner.enable_deadlock && !process_inner.semaphore_deadlock_detect() {
-        return -0xDEAD;
-    }
-    let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
-    drop(process_inner);
+        if process_inner.enable_deadlock && process_inner.deadlock_detect() {
+            return -0xDEAD;
+        }
+        Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap())
+    };
     sem.down();
     0
 }

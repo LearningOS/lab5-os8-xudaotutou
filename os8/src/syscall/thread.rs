@@ -6,6 +6,7 @@ use crate::{
 use alloc::{sync::Arc, vec};
 
 pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
+    println!("new_task");
     let task = current_task().unwrap();
     let process = task.process.upgrade().unwrap();
     // create a new thread
@@ -40,6 +41,7 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     tasks[new_task_tid] = Some(Arc::clone(&new_task));
     // add new task to scheduler
     add_task(Arc::clone(&new_task));
+
     let mutex_len = process_inner.mutex_available_vector.len();
     let sem_len = process_inner.semaphore_available_vector.len();
     process_inner
