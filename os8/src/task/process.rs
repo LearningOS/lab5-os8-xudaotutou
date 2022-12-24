@@ -80,17 +80,20 @@ impl ProcessControlBlockInner {
         let allocation = &self.mutex_allocation_vector;
 
         (0..src_len).all(|task_id| {
-            if !finish[task_id]
-                && need[task_id]
+            if !finish[task_id] {
+                if need[task_id]
                     .iter()
                     .zip(work.iter())
                     .all(|(src_need, src_work)| src_need <= src_work)
-            {
-                finish[task_id] = true;
-                work.iter_mut()
-                    .enumerate()
-                    .for_each(|(src_id, src_work)| *src_work += allocation[task_id][src_id]);
-                true
+                {
+                    finish[task_id] = true;
+                    work.iter_mut()
+                        .enumerate()
+                        .for_each(|(src_id, src_work)| *src_work += allocation[task_id][src_id]);
+                    true
+                } else {
+                    false
+                }
             } else {
                 finish.iter().take(task_id).all(|t| *t)
             }
@@ -103,18 +106,21 @@ impl ProcessControlBlockInner {
         let mut s_finish = vec![false; s_src_len];
         let s_allocation = &self.semaphore_allocation_vector;
         (0..s_src_len).all(|task_id| {
-            if !s_finish[task_id]
-                && s_need[task_id]
+            if !s_finish[task_id] {
+                if s_need[task_id]
                     .iter()
                     .zip(s_work.iter())
                     .all(|(src_need, src_work)| src_need <= src_work)
-            {
-                s_finish[task_id] = true;
-                s_work
-                    .iter_mut()
-                    .enumerate()
-                    .for_each(|(src_id, src_work)| *src_work += s_allocation[task_id][src_id]);
-                true
+                {
+                    s_finish[task_id] = true;
+                    s_work
+                        .iter_mut()
+                        .enumerate()
+                        .for_each(|(src_id, src_work)| *src_work += s_allocation[task_id][src_id]);
+                    true
+                } else {
+                    false
+                }
             } else {
                 s_finish.iter().take(task_id).all(|t| *t)
             }
